@@ -10,16 +10,24 @@ st.set_page_config(page_title="Telecom Churn Analysis", page_icon="📞", layout
 # loading data - tries snowflake first, falls back to csv
 @st.cache_data
 def load_data():
+    import warnings
+    warnings.filterwarnings('ignore')
     try:
         import snowflake.connector
         load_dotenv()
         # try streamlit secrets first (for cloud), then .env (for local)
-        user = st.secrets.get("SNOWFLAKE_USER", os.getenv('SNOWFLAKE_USER'))
-        password = st.secrets.get("SNOWFLAKE_PASSWORD", os.getenv('SNOWFLAKE_PASSWORD'))
-        account = st.secrets.get("SNOWFLAKE_ACCOUNT", os.getenv('SNOWFLAKE_ACCOUNT'))
-        warehouse = st.secrets.get("SNOWFLAKE_WAREHOUSE", os.getenv('SNOWFLAKE_WAREHOUSE'))
-        database = st.secrets.get("SNOWFLAKE_DATABASE", os.getenv('SNOWFLAKE_DATABASE'))
-        
+        try:
+            user = st.secrets["SNOWFLAKE_USER"]
+            password = st.secrets["SNOWFLAKE_PASSWORD"]
+            account = st.secrets["SNOWFLAKE_ACCOUNT"]
+            warehouse = st.secrets["SNOWFLAKE_WAREHOUSE"]
+            database = st.secrets["SNOWFLAKE_DATABASE"]
+        except:
+            user = os.getenv('SNOWFLAKE_USER')
+            password = os.getenv('SNOWFLAKE_PASSWORD')
+            account = os.getenv('SNOWFLAKE_ACCOUNT')
+            warehouse = os.getenv('SNOWFLAKE_WAREHOUSE')
+            database = os.getenv('SNOWFLAKE_DATABASE')
         conn = snowflake.connector.connect(
             user=user,
             password=password,
@@ -53,7 +61,7 @@ model_data = load_model()
 # sidebar
 st.sidebar.title("📞 Telecom Churn")
 st.sidebar.markdown("---")
-page = st.sidebar.radio("", 
+page = st.sidebar.radio("Navigate", 
     ["Overview", "Churn Explorer", "Risk Predictor", "Playbook"])
 
 st.sidebar.markdown("---")
