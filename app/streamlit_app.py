@@ -13,12 +13,19 @@ def load_data():
     try:
         import snowflake.connector
         load_dotenv()
+        # try streamlit secrets first (for cloud), then .env (for local)
+        user = st.secrets.get("SNOWFLAKE_USER", os.getenv('SNOWFLAKE_USER'))
+        password = st.secrets.get("SNOWFLAKE_PASSWORD", os.getenv('SNOWFLAKE_PASSWORD'))
+        account = st.secrets.get("SNOWFLAKE_ACCOUNT", os.getenv('SNOWFLAKE_ACCOUNT'))
+        warehouse = st.secrets.get("SNOWFLAKE_WAREHOUSE", os.getenv('SNOWFLAKE_WAREHOUSE'))
+        database = st.secrets.get("SNOWFLAKE_DATABASE", os.getenv('SNOWFLAKE_DATABASE'))
+        
         conn = snowflake.connector.connect(
-            user=os.getenv('SNOWFLAKE_USER'),
-            password=os.getenv('SNOWFLAKE_PASSWORD'),
-            account=os.getenv('SNOWFLAKE_ACCOUNT'),
-            warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
-            database=os.getenv('SNOWFLAKE_DATABASE'),
+            user=user,
+            password=password,
+            account=account,
+            warehouse=warehouse,
+            database=database,
             schema='CLEAN'
         )
         ibm_maven = pd.read_sql('SELECT * FROM IBM_MAVEN', conn)
