@@ -26,7 +26,7 @@ def load_data():
         st.sidebar.success("connected to snowflake")
     except:
         ibm_maven = pd.read_csv('data/processed/scored_customers.csv')
-        kaggle = pd.read_csv('data/raw/kaggle_telecoms_churn.csv')
+        kaggle = pd.read_csv('data/processed/kaggle_telecoms.csv')
         st.sidebar.info("using local csv files")
     
     ibm_maven['CHURN_BINARY'] = (ibm_maven['CHURN'] == 'Yes').astype(int)
