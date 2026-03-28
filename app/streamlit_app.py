@@ -10,12 +10,9 @@ st.set_page_config(page_title="Telecom Churn Analysis", page_icon="📞", layout
 # loading data - tries snowflake first, falls back to csv
 @st.cache_data
 def load_data():
-    import warnings
-    warnings.filterwarnings('ignore')
     try:
         import snowflake.connector
         load_dotenv()
-        # try streamlit secrets first (for cloud), then .env (for local)
         try:
             user = st.secrets["SNOWFLAKE_USER"]
             password = st.secrets["SNOWFLAKE_PASSWORD"]
@@ -28,6 +25,7 @@ def load_data():
             account = os.getenv('SNOWFLAKE_ACCOUNT')
             warehouse = os.getenv('SNOWFLAKE_WAREHOUSE')
             database = os.getenv('SNOWFLAKE_DATABASE')
+        
         conn = snowflake.connector.connect(
             user=user,
             password=password,
@@ -39,10 +37,9 @@ def load_data():
         ibm_maven = pd.read_sql('SELECT * FROM IBM_MAVEN', conn)
         kaggle = pd.read_sql('SELECT * FROM KAGGLE_TELECOMS', conn)
         st.sidebar.success("connected to snowflake")
-    except:
+    except Exception as e:
         ibm_maven = pd.read_csv('data/processed/scored_customers.csv')
         kaggle = pd.read_csv('data/processed/kaggle_telecoms.csv')
-        st.sidebar.info("using local csv files")
     
     ibm_maven['CHURN_BINARY'] = (ibm_maven['CHURN'] == 'Yes').astype(int)
     return ibm_maven, kaggle
@@ -62,7 +59,8 @@ model_data = load_model()
 st.sidebar.title("📞 Telecom Churn")
 st.sidebar.markdown("---")
 page = st.sidebar.radio("Navigate", 
-    ["Overview", "Churn Explorer", "Risk Predictor", "Playbook"])
+    ["Overview", "Churn Explorer", "Risk Predictor", "Playbook"],
+    label_visibility="collapsed")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**data sources:**")
@@ -70,14 +68,10 @@ st.sidebar.markdown("IBM Telco + Maven Analytics (6,589)")
 st.sidebar.markdown("Kaggle Telecoms (3,333)")
 
 
-# ============================================
-# PAGE 1: OVERVIEW
-# ============================================
 if page == "Overview":
     st.title("Telecom Churn Overview")
     st.markdown("analyzing ~10,000 customers to understand who churns and why")
     
-    # top level metrics
     total = len(ibm_maven)
     churned = (ibm_maven['CHURN'] == 'Yes').sum()
     churn_rate = churned / total * 100
@@ -91,7 +85,6 @@ if page == "Overview":
     
     st.markdown("---")
     
-    # charts row 1
     col1, col2 = st.columns(2)
     
     with col1:
@@ -127,7 +120,6 @@ if page == "Overview":
         st.pyplot(fig)
         plt.close()
     
-    # charts row 2
     col1, col2 = st.columns(2)
     
     with col1:
@@ -165,31 +157,23 @@ if page == "Overview":
         plt.close()
 
 
-# ============================================
-# PAGE 2: CHURN EXPLORER
-# ============================================
 elif page == "Churn Explorer":
     st.title("Churn Explorer")
     st.markdown("filter and explore churn patterns")
     
-    # filters in sidebar
     st.sidebar.markdown("### Filters")
     
-    # contract filter
     contracts = ibm_maven['CONTRACT'].unique().tolist()
     selected_contracts = st.sidebar.multiselect("Contract Type", contracts, default=contracts)
     
-    # tenure filter
     tenure_range = st.sidebar.slider("Tenure (months)", 
         int(ibm_maven['TENURE'].min()), int(ibm_maven['TENURE'].max()),
         (0, int(ibm_maven['TENURE'].max())))
     
-    # monthly charges filter
     charge_range = st.sidebar.slider("Monthly Charges ($)",
         float(ibm_maven['MONTHLYCHARGES'].min()), float(ibm_maven['MONTHLYCHARGES'].max()),
         (float(ibm_maven['MONTHLYCHARGES'].min()), float(ibm_maven['MONTHLYCHARGES'].max())))
     
-    # apply filters
     filtered = ibm_maven[
         (ibm_maven['CONTRACT'].isin(selected_contracts)) &
         (ibm_maven['TENURE'] >= tenure_range[0]) &
@@ -198,7 +182,6 @@ elif page == "Churn Explorer":
         (ibm_maven['MONTHLYCHARGES'] <= charge_range[1])
     ]
     
-    # metrics for filtered data
     total = len(filtered)
     churned = (filtered['CHURN'] == 'Yes').sum()
     rate = churned / total * 100 if total > 0 else 0
@@ -210,7 +193,6 @@ elif page == "Churn Explorer":
     
     st.markdown("---")
     
-    # charts for filtered data
     col1, col2 = st.columns(2)
     
     with col1:
@@ -239,7 +221,6 @@ elif page == "Churn Explorer":
             st.pyplot(fig)
             plt.close()
     
-    # churn reasons for filtered data
     st.subheader("Churn Reasons (filtered)")
     if churned > 0:
         reasons = filtered[filtered['CHURN']=='Yes']['CHURN_CATEGORY'].value_counts()
@@ -252,14 +233,10 @@ elif page == "Churn Explorer":
     else:
         st.info("no churned customers in current filter")
     
-    # raw data
     with st.expander("view raw data"):
         st.dataframe(filtered.head(100))
 
 
-# ============================================
-# PAGE 3: RISK PREDICTOR
-# ============================================
 elif page == "Risk Predictor":
     st.title("Customer Churn Risk Predictor")
     st.markdown("input a customer profile to get their churn probability")
@@ -277,7 +254,7 @@ elif page == "Risk Predictor":
             st.subheader("Customer Info")
             tenure = st.slider("Tenure (months)", 0, 72, 12)
             monthly_charges = st.slider("Monthly Charges ($)", 18.0, 120.0, 70.0)
-            total_charges = monthly_charges * tenure  # rough estimate
+            total_charges = monthly_charges * tenure
             contract = st.selectbox("Contract", ['Month-to-month', 'One year', 'Two year'])
             internet = st.selectbox("Internet Service", ['DSL', 'Fiber optic', 'No'])
             tech_support = st.selectbox("Tech Support", ['Yes', 'No', 'No internet service'])
@@ -295,14 +272,10 @@ elif page == "Risk Predictor":
             paperless = st.selectbox("Paperless Billing", ['Yes', 'No'])
         
         if st.button("predict churn risk", type="primary"):
-            # build input matching the model features
-            # start with numeric features
             input_dict = {}
-            
             for col in feature_cols:
-                input_dict[col] = 0  # default everything to 0
+                input_dict[col] = 0
             
-            # fill in what we know
             if 'TENURE' in input_dict: input_dict['TENURE'] = tenure
             if 'MONTHLYCHARGES' in input_dict: input_dict['MONTHLYCHARGES'] = monthly_charges
             if 'TOTALCHARGES' in input_dict: input_dict['TOTALCHARGES'] = total_charges
@@ -311,7 +284,6 @@ elif page == "Risk Predictor":
             if 'NUMBER_OF_REFERRALS' in input_dict: input_dict['NUMBER_OF_REFERRALS'] = 0
             if 'AVG_MONTHLY_GB_DOWNLOAD' in input_dict: input_dict['AVG_MONTHLY_GB_DOWNLOAD'] = 20
             
-            # encode categoricals using the same encoders from training
             cat_mappings = {
                 'GENDER': gender, 'CONTRACT': contract, 'INTERNETSERVICE': internet,
                 'TECHSUPPORT': tech_support, 'ONLINESECURITY': online_security,
@@ -333,11 +305,9 @@ elif page == "Risk Predictor":
                     except:
                         input_dict[col_name] = 0
             
-            # make prediction
             X_input = pd.DataFrame([input_dict])[feature_cols]
             prob = model.predict_proba(X_input)[0][1]
             
-            # risk tier
             if prob < 0.3:
                 tier = "🟢 Low Risk"
             elif prob < 0.6:
@@ -353,7 +323,6 @@ elif page == "Risk Predictor":
             r2.metric("Risk Tier", tier)
             r3.metric("Monthly Revenue", f"${monthly_charges:.0f}")
             
-            # recommended actions based on profile
             st.subheader("recommended actions")
             
             actions = []
@@ -379,9 +348,6 @@ elif page == "Risk Predictor":
                 st.markdown(f"- {a}")
 
 
-# ============================================
-# PAGE 4: PLAYBOOK
-# ============================================
 elif page == "Playbook":
     st.title("Churn Playbook")
     st.markdown("retention action plan based on analysis of ~10,000 customers")
